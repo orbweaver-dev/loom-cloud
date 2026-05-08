@@ -1,0 +1,111 @@
+model: Site
+label: Site
+icon: cloud
+description: One tenant deployment running on the loom-cloud hosted runtime. Maps a slug subdomain (<slug>.loom.dev) to a container running that tenant's Loom binary. The Provisioner reads / writes this row to track lifecycle.
+
+tenant_scoped: true
+
+fields:
+  - name: tenant_id
+    type: link
+    label: Tenant
+    required: true
+    target: Tenant
+
+  - name: slug
+    type: text
+    label: Slug
+    required: true
+    unique: true
+    searchable: true
+    help_text: Subdomain identifier — the site runs at <slug>.loom.dev. Mirrors Tenant.slug for the primary deployment; multi-environment deployments (dev/staging/prod) use distinct slugs.
+
+  - name: image
+    type: text
+    label: Image
+    required: true
+    help_text: Container image identifier. Format is provider-specific — "ghcr.io/acme/loom-app:1.4.2" for Docker.
+
+  - name: version
+    type: text
+    label: Version
+    help_text: Informational; semver. Surfaces in dashboards.
+
+  - name: status
+    type: select
+    label: Status
+    required: true
+    default: "pending"
+    options:
+      - label: Pending
+        value: pending
+      - label: Provisioning
+        value: provisioning
+        color: orange
+      - label: Running
+        value: running
+        color: green
+      - label: Failed
+        value: failed
+        color: red
+      - label: Deprovisioning
+        value: deprovisioning
+        color: orange
+      - label: Stopped
+        value: stopped
+
+  - name: env_json
+    type: json
+    label: Environment Variables
+    secret: true
+    help_text: Per-deployment env vars (DB DSN, API keys, etc). Encrypted at rest.
+
+  - name: last_deployed_at
+    type: datetime
+    label: Last Deployed At
+
+  - name: last_error
+    type: textarea
+    label: Last Error
+    help_text: Most recent provisioner error, if any. Cleared on successful provision.
+
+  - name: container_id
+    type: text
+    label: Container ID
+    help_text: Provisioner-assigned ID (Docker container hash, K8s pod name, etc). For ops debugging.
+
+relationships:
+  - type: belongs_to
+    target: Tenant
+    foreign_key: tenant_id
+    label: Tenant
+
+permissions:
+  - role: PlatformAdmin
+    can: all
+  - role: TenantOwner
+    can: [read]
+  - role: TenantAdmin
+    can: [read]
+
+list_view:
+  columns: [slug, status, image, last_deployed_at]
+  default_sort: last_deployed_at
+  sort_order: desc
+  filters: [status]
+  search: true
+
+form_view:
+  sections:
+    - label: Identity
+      columns: 1
+      fields: [slug, tenant_id]
+    - label: Deployment
+      columns: 2
+      fields: [image, version]
+    - label: Status
+      columns: 1
+      fields: [status, last_deployed_at, last_error, container_id]
+    - label: Configuration
+      columns: 1
+      fields: [env_json]
