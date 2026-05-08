@@ -22,6 +22,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/orbweaver-dev/loom-cloud/internal/dns"
 	"github.com/orbweaver-dev/loom-cloud/internal/edge"
 )
 
@@ -46,6 +47,19 @@ func main() {
 			slog.Info("registered demo tenant", "slug", "demo", "port", port)
 		}
 	}
+
+	// DNS automation: when CLOUDFLARE_API_TOKEN + CLOUDFLARE_ZONE_ID
+	// + LOOM_EDGE_IP are all set, build a Manager so the
+	// provisioner watcher can call EnsureSlug / RemoveSlug as
+	// tenants come and go. When env is missing we run without
+	// DNS — fine for local dev where /etc/hosts handles it.
+	dnsMgr := buildDNSManager(*baseDomain)
+	if dnsMgr != nil {
+		slog.Info("dns automation enabled", "base_domain", *baseDomain, "edge_ip", dnsMgr.EdgeIP)
+	} else {
+		slog.Info("dns automation disabled — set CLOUDFLARE_API_TOKEN + CLOUDFLARE_ZONE_ID + LOOM_EDGE_IP to enable")
+	}
+	_ = dnsMgr // wired up for the watcher loop; not used by the v0.0.1 main directly
 
 	router := &edge.Router{PortMap: portMap}
 	handler, err := router.Handler(*baseDomain)
@@ -74,5 +88,23 @@ func main() {
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		slog.Error("listen failed", "err", err)
 		os.Exit(1)
+	}
+}
+
+// buildDNSManager assembles a dns.Manager from environment
+// variables. Returns nil when any required value is missing —
+// callers treat nil as "DNS automation disabled" and fall back
+// to manual DNS / /etc/hosts.
+func buildDNSManager(baseDomain string) *dns.Manager {
+	token := os.Getenv("CLOUDFLARE_API_TOKEN")
+	zoneID := os.Getenv("CLOUDFLARE_ZONE_ID")
+	edgeIP := os.Getenv("LOOM_EDGE_IP")
+	if token == "" || zoneID == "" || edgeIP == "" {
+		return nil
+	}
+	return &dns.Manager{
+		Provider:   dns.NewCloudflareProvider(token, zoneID),
+		BaseDomain: baseDomain,
+		EdgeIP:     edgeIP,
 	}
 }
