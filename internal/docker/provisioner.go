@@ -80,7 +80,9 @@ func (p *Provisioner) Provision(ctx context.Context, site *hosting.Site) error {
 		site.LastError = fmt.Sprintf("run: %s", trim(out))
 		return err
 	}
-	site.Slug = site.Slug // unchanged; just here so go vet doesn't complain about the unused field
+	// (Slug stays as-is; the docker container is named after it
+	// via containerName above and the host port is published
+	// against the slug in the caller's port map.)
 
 	// Health-check loop.
 	timeout := p.HealthCheckTimeout
