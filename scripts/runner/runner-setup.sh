@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 #
 # runner-setup.sh — register a GitHub Actions self-hosted runner
-# for orbweaver-dev/loom-cloud on this machine (typically wh1).
+# for orbweaver-dev/loom-cloud on this machine (typically beast64).
 #
 # Parallel to scripts/runner/runner-setup.sh in the loom repo
 # but registers a SEPARATE runner under a DIFFERENT user
 # (loom-cloud-runner) so the two runners don't share a working
 # directory or credentials. Same security posture: dedicated
-# user, no sudo, no SSH keys, no FrothIQ webroot access.
+# user, no sudo, no access to other users' working trees.
 #
-# Usage on wh1:
+# Usage:
 #   sudo useradd -m -s /bin/bash loom-cloud-runner
 #   sudo usermod -aG docker loom-cloud-runner
 #   sudo -u loom-cloud-runner -i
@@ -18,8 +18,9 @@
 #   chmod +x runner-setup.sh
 #   ./runner-setup.sh
 #   exit
-#   sudo /home/loom-cloud-runner/actions-runner-loom-cloud/svc.sh install loom-cloud-runner
-#   sudo /home/loom-cloud-runner/actions-runner-loom-cloud/svc.sh start
+#   cd /home/loom-cloud-runner/actions-runner-loom-cloud
+#   sudo ./svc.sh install loom-cloud-runner
+#   sudo ./svc.sh start
 set -euo pipefail
 
 REPO_OWNER="${REPO_OWNER:-orbweaver-dev}"
@@ -27,8 +28,8 @@ REPO_NAME="${REPO_NAME:-loom-cloud}"
 REPO_URL="${REPO_URL:-https://github.com/${REPO_OWNER}/${REPO_NAME}}"
 RUNNER_VERSION="${RUNNER_VERSION:-2.319.1}"
 RUNNER_DIR="${RUNNER_DIR:-$HOME/actions-runner-loom-cloud}"
-RUNNER_NAME="${RUNNER_NAME:-wh1-loom-cloud}"
-RUNNER_LABELS="${RUNNER_LABELS:-self-hosted,linux,X64,wh1}"
+RUNNER_NAME="${RUNNER_NAME:-$(hostname -s)-loom-cloud}"
+RUNNER_LABELS="${RUNNER_LABELS:-self-hosted,linux,X64,$(hostname -s)}"
 
 if [[ "$EUID" -eq 0 ]]; then
   echo "✗ refuse to run as root. Switch to the runner user first."

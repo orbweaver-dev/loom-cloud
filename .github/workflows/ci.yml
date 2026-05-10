@@ -1,9 +1,10 @@
 name: ci
 
-# Self-hosted runner on wh1.zonkhost.net.
-# Same shape as the loom repo's workflow — build / vet / test
-# on every push, all on dedicated hardware so we burn zero
-# GitHub-hosted Actions minutes.
+# Self-hosted runner on beast64.zonkhost.net.
+# Mirrors loom's workflow shape — but loom-cloud's go.mod has
+# `replace github.com/orbweaver-dev/loom => ../loom`, so we
+# check out both repos as siblings and run go from inside
+# loom-cloud. ../loom resolves to the second checkout.
 
 on:
   push:
@@ -19,13 +20,25 @@ jobs:
   test:
     name: test
     runs-on: [self-hosted, linux, X64]
+    defaults:
+      run:
+        working-directory: loom-cloud
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: loom-cloud
+
+      - uses: actions/checkout@v4
+        with:
+          repository: orbweaver-dev/loom
+          path: loom
+          token: ${{ secrets.LOOM_REPO_TOKEN }}
 
       - uses: actions/setup-go@v5
         with:
           go-version: '1.24'
           cache: true
+          cache-dependency-path: loom-cloud/go.sum
 
       - name: Verify go.mod is tidy
         run: |
