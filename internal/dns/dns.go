@@ -65,6 +65,11 @@ type Manager struct {
 	BaseDomain string // e.g. "loom.dev"
 	EdgeIP     string // public IP of the edge server (A record target)
 	TTL        int    // 0 = provider default
+	// Regions, when set, resolves a Site's home region to that
+	// region's edge IP for EnsureSlugInRegion — so each tenant's
+	// record points at the edge nearest its placement. nil → all
+	// slugs use EdgeIP (single-region). See region.go.
+	Regions RegionSelector
 }
 
 // EnsureSlug adds (or refreshes) the A record `<slug>.<base>` →
