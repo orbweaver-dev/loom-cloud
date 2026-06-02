@@ -92,6 +92,10 @@ type Router struct {
 	// cross-region forwarding. Required when Locator + LocalRegion
 	// are set and Sites can live in other regions.
 	Regions RegionResolver
+	// RateLimiter, when non-nil, gates each request on the resolved
+	// slug's budget — a tenant over its allowance gets 429. nil
+	// disables rate limiting (unchanged behaviour).
+	RateLimiter RateLimiter
 	// Backend formats a URL given (host, port). Default
 	// "http://127.0.0.1:<port>". Override for non-loopback
 	// backends (e.g. "http://10.0.<svc>.<port>").
@@ -163,6 +167,9 @@ func (r *Router) dispatch(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "site not available", http.StatusServiceUnavailable)
 		return
 	}
+	if r.rateLimited(w, slug) {
+		return
+	}
 	port, ok, err := r.lookupPort(req.Context(), slug)
 	if err != nil || !ok {
 		http.Error(w, "site not available", http.StatusServiceUnavailable)
@@ -179,6 +186,18 @@ func (r *Router) lookupPort(ctx context.Context, slug string) (int, bool, error)
 		return loc.Port, ok, err
 	}
 	return r.PortMap.Lookup(ctx, slug)
+}
+
+// rateLimited reports whether the request should be rejected for
+// exceeding the slug's rate budget, writing a 429 when so. No-op
+// (returns false) when no RateLimiter is configured.
+func (r *Router) rateLimited(w http.ResponseWriter, slug string) bool {
+	if r.RateLimiter == nil || r.RateLimiter.Allow(slug) {
+		return false
+	}
+	w.Header().Set("Retry-After", "1")
+	http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
+	return true
 }
 
 func (r *Router) backendFor(port int) string {
