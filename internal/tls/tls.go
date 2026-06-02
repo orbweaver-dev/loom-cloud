@@ -126,11 +126,11 @@ func (m *Manager) HTTPHandler(fallback http.Handler) http.Handler {
 //
 // Rules:
 //
-//	1. Host must be exactly "<slug>.<BaseDomain>" — the apex
-//	   itself is rejected (set up an apex policy explicitly if
-//	   you need it; it's a different concern).
-//	2. Slug must pass AllowSlug — the per-tenant existence
-//	   check. nil AllowSlug accepts all slugs (dev only).
+//  1. Host must be exactly "<slug>.<BaseDomain>" — the apex
+//     itself is rejected (set up an apex policy explicitly if
+//     you need it; it's a different concern).
+//  2. Slug must pass AllowSlug — the per-tenant existence
+//     check. nil AllowSlug accepts all slugs (dev only).
 func (m *Manager) hostPolicy(_ context.Context, host string) error {
 	suffix := "." + m.opts.BaseDomain
 	if !strings.HasSuffix(host, suffix) {

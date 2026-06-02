@@ -25,8 +25,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"sync"
 
 	"github.com/orbweaver-dev/loom/pkg/hosting"
@@ -78,20 +76,51 @@ func (m *MemoryPortMap) Lookup(_ context.Context, slug string) (int, bool, error
 // Router is the edge router's http.Handler. Wraps a
 // SubdomainResolver around a per-slug reverse proxy.
 type Router struct {
-	// PortMap resolves slug → backend port. Required.
+	// PortMap resolves slug → backend port (single-region path).
+	// Required unless Locator is set.
 	PortMap SitePortMap
+	// Locator resolves slug → (port, region) for region-aware
+	// routing. When set with a non-empty LocalRegion, the router
+	// forwards traffic for Sites homed in another region to that
+	// region's edge (via Regions) and proxies local-region Sites to
+	// their port. Takes precedence over PortMap.
+	Locator SiteLocator
+	// LocalRegion is this edge node's region. Empty → single-region
+	// mode (legacy behaviour; a Locator's region is ignored).
+	LocalRegion string
+	// Regions maps a region name to that region's edge base URL for
+	// cross-region forwarding. Required when Locator + LocalRegion
+	// are set and Sites can live in other regions.
+	Regions RegionResolver
 	// Backend formats a URL given (host, port). Default
 	// "http://127.0.0.1:<port>". Override for non-loopback
 	// backends (e.g. "http://10.0.<svc>.<port>").
 	Backend func(port int) string
 }
 
+// regionAware reports whether the router is configured for
+// region-aware routing (Locator + a local region).
+func (r *Router) regionAware() bool {
+	return r.Locator != nil && r.LocalRegion != ""
+}
+
+// exists reports whether a slug resolves, via whichever resolver
+// is configured. Used by the SubdomainResolver hook.
+func (r *Router) exists(ctx context.Context, slug string) (bool, error) {
+	if r.Locator != nil {
+		_, ok, err := r.Locator.Locate(ctx, slug)
+		return ok, err
+	}
+	_, ok, err := r.PortMap.Lookup(ctx, slug)
+	return ok, err
+}
+
 // Handler returns the http.Handler chain ready to mount on the
 // edge listener. baseDomain is the parent domain (e.g.
 // "loom.dev") under which tenant subdomains live.
 func (r *Router) Handler(baseDomain string) (http.Handler, error) {
-	if r.PortMap == nil {
-		return nil, fmt.Errorf("edge: PortMap is required")
+	if r.PortMap == nil && r.Locator == nil {
+		return nil, fmt.Errorf("edge: PortMap or Locator is required")
 	}
 	resolver := &hosting.SubdomainResolver{
 		BaseDomain: baseDomain,
@@ -105,7 +134,7 @@ func (r *Router) Handler(baseDomain string) (http.Handler, error) {
 			// here as a documented hook for future per-
 			// tenant edge logic (rate limiting, custom
 			// domain routing).
-			_, ok, err := r.PortMap.Lookup(ctx, slug)
+			ok, err := r.exists(ctx, slug)
 			if err != nil || !ok {
 				return "", false, err
 			}
@@ -116,7 +145,13 @@ func (r *Router) Handler(baseDomain string) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	return mw(http.HandlerFunc(r.dispatch)), nil
+	// Region-aware dispatch when a Locator + LocalRegion are set;
+	// otherwise the single-region port-map path.
+	handler := r.dispatch
+	if r.regionAware() {
+		handler = r.dispatchRegionAware
+	}
+	return mw(http.HandlerFunc(handler)), nil
 }
 
 // dispatch is the per-request handler that runs after the
@@ -128,18 +163,22 @@ func (r *Router) dispatch(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "site not available", http.StatusServiceUnavailable)
 		return
 	}
-	port, ok, err := r.PortMap.Lookup(req.Context(), slug)
+	port, ok, err := r.lookupPort(req.Context(), slug)
 	if err != nil || !ok {
 		http.Error(w, "site not available", http.StatusServiceUnavailable)
 		return
 	}
-	backendURL := r.backendFor(port)
-	target, err := url.Parse(backendURL)
-	if err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
+	r.proxyTo(w, req, r.backendFor(port))
+}
+
+// lookupPort resolves a slug to its backend port via whichever
+// resolver is configured (Locator preferred).
+func (r *Router) lookupPort(ctx context.Context, slug string) (int, bool, error) {
+	if r.Locator != nil {
+		loc, ok, err := r.Locator.Locate(ctx, slug)
+		return loc.Port, ok, err
 	}
-	httputil.NewSingleHostReverseProxy(target).ServeHTTP(w, req)
+	return r.PortMap.Lookup(ctx, slug)
 }
 
 func (r *Router) backendFor(port int) string {

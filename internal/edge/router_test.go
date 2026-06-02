@@ -28,7 +28,7 @@ func TestMemoryPortMap_SetAndLookup(t *testing.T) {
 func TestRouter_HandlerRequiresPortMap(t *testing.T) {
 	_, err := (&Router{}).Handler("loom.dev")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "PortMap is required")
+	assert.Contains(t, err.Error(), "PortMap or Locator is required")
 }
 
 func TestRouter_ProxiesToBackend(t *testing.T) {

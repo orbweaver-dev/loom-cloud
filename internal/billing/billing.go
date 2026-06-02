@@ -60,8 +60,8 @@ func (p Plan) IsValid() bool {
 type UsageEvent struct {
 	SiteID     string
 	TenantID   string
-	Kind       string         // "api_request", "agent_run", "storage_gb_hour", etc.
-	Quantity   float64        // typically integer; float64 for storage-hours / token counts
+	Kind       string  // "api_request", "agent_run", "storage_gb_hour", etc.
+	Quantity   float64 // typically integer; float64 for storage-hours / token counts
 	OccurredAt time.Time
 	Metadata   map[string]any
 }
@@ -97,12 +97,12 @@ type Invoicer interface {
 
 // InvoiceItem is one line on a tenant's upcoming invoice.
 type InvoiceItem struct {
-	TenantID    string
-	Kind        string  // mirrors UsageEvent.Kind
-	Quantity    float64 // total for the period
+	TenantID     string
+	Kind         string  // mirrors UsageEvent.Kind
+	Quantity     float64 // total for the period
 	UnitPriceUSD float64 // looked up from the Plan's price table
-	Description string  // human-readable summary (e.g. "12,034 API requests in May 2026")
-	Period      Period
+	Description  string  // human-readable summary (e.g. "12,034 API requests in May 2026")
+	Period       Period
 }
 
 // Period bounds an invoicing window. Half-open: [Start, End).
