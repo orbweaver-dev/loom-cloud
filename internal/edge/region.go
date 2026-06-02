@@ -103,6 +103,9 @@ func (r *Router) dispatchRegionAware(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "site not available", http.StatusServiceUnavailable)
 		return
 	}
+	if r.rateLimited(w, slug) {
+		return
+	}
 	loc, ok, err := r.Locator.Locate(req.Context(), slug)
 	if err != nil || !ok {
 		http.Error(w, "site not available", http.StatusServiceUnavailable)
