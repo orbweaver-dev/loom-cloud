@@ -216,3 +216,42 @@ func (failingDNS) Upsert(context.Context, dns.Record) (dns.Record, error) {
 }
 func (failingDNS) Delete(context.Context, string, string) error { return nil }
 func (failingDNS) List(context.Context) ([]dns.Record, error)   { return nil, nil }
+
+func TestWatcher_RegionScoped_ClaimsOnlyOwnRegion(t *testing.T) {
+	w, repo, prov, _, _ := newWatcher(t)
+	w.Region = "us-east"
+
+	// One Site in our region, one in another, one unplaced.
+	repo.Insert(&hosting.Site{ID: "s1", Slug: "east", TenantID: "t1", Image: "img", Region: "us-east"})
+	repo.Insert(&hosting.Site{ID: "s2", Slug: "west", TenantID: "t2", Image: "img", Region: "eu-west"})
+
+	w.tick(context.Background())
+
+	assert.Equal(t, hosting.SiteRunning, repo.Get("s1").Status, "own-region site provisioned")
+	assert.Equal(t, hosting.SitePending, repo.Get("s2").Status, "other-region site left for its own watcher")
+	assert.Equal(t, int32(1), prov.provisionCalls.Load(), "exactly one site provisioned")
+}
+
+func TestWatcher_Unscoped_ClaimsAllRegions(t *testing.T) {
+	w, repo, prov, _, _ := newWatcher(t)
+	// w.Region == "" → single-region: claim regardless of annotation.
+	repo.Insert(&hosting.Site{ID: "s1", Slug: "a", TenantID: "t1", Image: "img", Region: "us-east"})
+	repo.Insert(&hosting.Site{ID: "s2", Slug: "b", TenantID: "t2", Image: "img", Region: "eu-west"})
+
+	w.tick(context.Background())
+
+	assert.Equal(t, hosting.SiteRunning, repo.Get("s1").Status)
+	assert.Equal(t, hosting.SiteRunning, repo.Get("s2").Status)
+	assert.Equal(t, int32(2), prov.provisionCalls.Load())
+}
+
+func TestWatcher_Owns(t *testing.T) {
+	unscoped := &Watcher{}
+	assert.True(t, unscoped.owns(&hosting.Site{Region: "anything"}))
+	assert.True(t, unscoped.owns(&hosting.Site{}))
+
+	scoped := &Watcher{Region: "us-east"}
+	assert.True(t, scoped.owns(&hosting.Site{Region: "us-east"}))
+	assert.False(t, scoped.owns(&hosting.Site{Region: "eu-west"}))
+	assert.False(t, scoped.owns(&hosting.Site{}), "unplaced site not claimed by a region-scoped watcher")
+}

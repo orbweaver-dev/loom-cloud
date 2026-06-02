@@ -31,6 +31,12 @@ fields:
     label: Version
     help_text: Informational; semver. Surfaces in dashboards.
 
+  - name: region
+    type: text
+    label: Region
+    searchable: true
+    help_text: Placement region (e.g. us-east, eu-west). The edge router forwards traffic for this site to its home region, and a per-region provisioner claims only the sites placed in its own region. Empty = single-region.
+
   - name: status
     type: select
     label: Status
@@ -89,10 +95,10 @@ permissions:
     can: [read]
 
 list_view:
-  columns: [slug, status, image, last_deployed_at]
+  columns: [slug, status, region, image, last_deployed_at]
   default_sort: last_deployed_at
   sort_order: desc
-  filters: [status]
+  filters: [status, region]
   search: true
 
 form_view:
@@ -102,7 +108,7 @@ form_view:
       fields: [slug, tenant_id]
     - label: Deployment
       columns: 2
-      fields: [image, version]
+      fields: [image, version, region]
     - label: Status
       columns: 1
       fields: [status, last_deployed_at, last_error, container_id]

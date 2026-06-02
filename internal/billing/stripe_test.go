@@ -160,9 +160,9 @@ func TestSQLUsageStore_RecordRejectsMissingFields(t *testing.T) {
 	// touching the DB. Reduces silent-data-loss footguns.
 	s := &SQLUsageStore{DB: nil}
 	for _, ev := range []UsageEvent{
-		{TenantID: "t", Kind: "k"},                     // no SiteID
-		{SiteID: "s", Kind: "k"},                       // no TenantID
-		{SiteID: "s", TenantID: "t"},                   // no Kind
+		{TenantID: "t", Kind: "k"},   // no SiteID
+		{SiteID: "s", Kind: "k"},     // no TenantID
+		{SiteID: "s", TenantID: "t"}, // no Kind
 	} {
 		err := s.Record(context.Background(), ev)
 		require.Error(t, err, "ev=%+v", ev)

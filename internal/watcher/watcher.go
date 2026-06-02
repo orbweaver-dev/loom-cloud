@@ -75,6 +75,25 @@ type Watcher struct {
 	// Lower values shorten provisioning latency at the cost
 	// of wasted SELECTs; higher values do the inverse.
 	Interval time.Duration
+	// Region, when non-empty, scopes this watcher to Sites placed
+	// in that region: it only provisions / deprovisions Sites whose
+	// Site.Region matches. Run one region-scoped watcher per region
+	// so each region's provisioner claims exactly its own Sites and
+	// they don't double-provision across regions. Empty (the
+	// default) is single-region mode — every pending Site is
+	// claimed, regardless of its Region annotation.
+	Region string
+}
+
+// owns reports whether this watcher is responsible for the Site
+// given its Region scope. A region-scoped watcher claims only
+// Sites whose Region matches exactly; an unscoped watcher claims
+// everything (legacy single-region behaviour).
+func (w *Watcher) owns(site *hosting.Site) bool {
+	if w.Region == "" {
+		return true
+	}
+	return site.Region == w.Region
 }
 
 // Start runs the reconcile loop until ctx is cancelled.
@@ -118,6 +137,9 @@ func (w *Watcher) tick(ctx context.Context) {
 		slog.Error("watcher: list pending", "err", err)
 	}
 	for _, site := range pending {
+		if !w.owns(site) {
+			continue // another region's watcher owns this Site
+		}
 		w.provisionOne(ctx, site)
 	}
 	deprov, err := w.Sites.Deprovisioning(ctx)
@@ -125,6 +147,9 @@ func (w *Watcher) tick(ctx context.Context) {
 		slog.Error("watcher: list deprovisioning", "err", err)
 	}
 	for _, site := range deprov {
+		if !w.owns(site) {
+			continue
+		}
 		w.deprovisionOne(ctx, site)
 	}
 }
